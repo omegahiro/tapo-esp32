@@ -1,4 +1,4 @@
-# TAPO-ESP32
+# Tapo-ESP32
 
 Unofficial Tapo API Client for ESP32.
 
@@ -9,6 +9,10 @@ Unofficial Tapo API Client for ESP32.
 - (Not supports Passthrough algorithm used in the older firmwares.)
 - Simple, lightweight, and easy-to-use API.
 
+## Prerequisites
+
+- Arduino IDE or PlatformIO.
+
 ## Installation
 
 Copy the following files into your project:
@@ -16,8 +20,7 @@ Copy the following files into your project:
 - `tapo_protocol.h`
 - `tapo_cipher.h`
 
-## Usage
-Here’s a example to get started:
+## Example
 
 ```cpp
 #include <Arduino.h>
@@ -54,3 +57,5 @@ void loop() {
 ## Credits
 
 Inspired by [mihai-dinculescu/tapo][inspired_by].
+
+[inspired_by]: https://github.com/mihai-dinculescu/tapo

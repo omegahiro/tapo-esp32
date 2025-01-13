@@ -5,7 +5,6 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
-#include <random>
 #include <mbedtls/sha1.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/aes.h>
@@ -95,18 +94,6 @@ public:
         return combined;
     }
 
-    static std::vector<uint8_t> random_bytes(size_t size) {
-        std::vector<uint8_t> data(size);
-
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, 255);
-
-        std::generate(data.begin(), data.end(), [&]() { return static_cast<uint8_t>(dis(gen)); });
-
-        return data;
-    }
-
 private:
     std::vector<uint8_t> key;
     std::vector<uint8_t> iv;
@@ -162,13 +149,16 @@ private:
 
 int test_tapo_cipher() {
     // Generate seed data
-    std::vector<uint8_t> local_seed = TapoCipher::random_bytes(16);
+    std::vector<uint8_t> local_seed = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                        0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10 };
 	std::cout << "Local seed: " << TapoCipher::to_hex_string(local_seed) << std::endl;
 
-    std::vector<uint8_t> remote_seed = TapoCipher::random_bytes(16);
+    std::vector<uint8_t> remote_seed = { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+                                         0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20 };
 	std::cout << "Remote seed: " << TapoCipher::to_hex_string(remote_seed) << std::endl;
 
-    std::vector<uint8_t> auth_hash = TapoCipher::random_bytes(16);
+    std::vector<uint8_t> auth_hash = { 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+                                       0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30 };
 	std::cout << "User hash: " << TapoCipher::to_hex_string(auth_hash) << std::endl;
 
     // Initialize TapoCipher class

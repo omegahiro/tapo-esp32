@@ -21,7 +21,7 @@ public:
         std::vector<uint8_t> password_hash = TapoCipher::sha1(to_bytes(password));
         std::vector<uint8_t> auth_hash = TapoCipher::sha256(TapoCipher::concat(username_hash, password_hash));
         TAPO_PROTOCOL_DEBUG("Auth hash: " + String(TapoCipher::to_hex_string(auth_hash).c_str()));
-        std::vector<uint8_t> local_seed = TapoCipher::random_bytes(16);
+        std::vector<uint8_t> local_seed = random_bytes(16);
         TAPO_PROTOCOL_DEBUG("Local seed: " + String(TapoCipher::to_hex_string(local_seed).c_str()));
 
         std::vector<uint8_t> remote_seed = handshake1(local_seed, auth_hash);
@@ -66,6 +66,13 @@ public:
 
     static String to_string(const std::vector<uint8_t>& value) {
         return String(reinterpret_cast<const char*>(value.data()), value.size());
+    }
+
+    static std::vector<uint8_t> random_bytes(size_t size) {
+        std::vector<uint8_t> data(size);
+        std::generate(data.begin(), data.end(), [&]() { return random(256); });
+
+        return data;
     }
     
     ~TapoProtocol() {
