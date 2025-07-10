@@ -17,11 +17,10 @@ private:
     bool send_command(const String &command, const String &expected_state = "") {
         for (int i = 0; i < TAPO_MAX_RECONNECT_RETRIES; i++) {
             for (int j = 0; j < TAPO_MAX_SEND_RETRIES; j++) {
+                protocol.send_message(command);
                 if (expected_state == "" || check_state(expected_state)) {
                     return true;
                 }
-                protocol.send_message(command);
-                delay(1000);
             }
             Serial.println("TAPO_DEVICE: Failed to send command, rehandshaking...");
             protocol.rehandshake();
@@ -62,14 +61,17 @@ public:
     void set_color(uint16_t hue, uint8_t saturation) {         // hue 0-360, sat 0-100
         String cmd = "{\"method\":\"set_device_info\",\"params\":{" +
                      wrap_param("hue", String(hue), true) + "," +
-                     wrap_param("saturation", String(saturation), true) + "}}";
+                     wrap_param("saturation", String(saturation), true) + "," +
+                     wrap_param("color_temp", "0", true) + "}}";
         String exp = "\"hue\":" + String(hue);
         send_command(cmd, exp);
     }
 
     void set_color_temperature(uint16_t kelvin) {              // e.g. 2500-6500
         String cmd = "{\"method\":\"set_device_info\",\"params\":{" +
-                     wrap_param("color_temp", String(kelvin), true) + "}}";
+                     wrap_param("color_temp", String(kelvin), true) + "," +
+                     wrap_param("hue", "0", true) + "," +
+                     wrap_param("saturation", "0", true) + "}}";
         String exp = "\"color_temp\":" + String(kelvin);
         send_command(cmd, exp);
     }
