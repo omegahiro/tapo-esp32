@@ -22,8 +22,15 @@ void setup() {
 }
 
 void loop() {
-    tapo.on(); // Turn on the device
-    delay(5000);
-    tapo.off(); // Turn off the device
-    delay(5000);
+    // === Common controls (Plugs & Lights) ===
+    tapo.off(); // Turn the device OFF
+    delay(3000);
+    tapo.on(); // Turn the device ON
+    delay(3000);
+
+    // === Light-specific controls ===
+    tapo.set_brightness(100);          // Set brightness (1–100%)
+    tapo.set_color(0, 100);            // Set color: hue (0–360°), saturation (0–100%)
+    tapo.set_color_temperature(2500);  // Set color temperature in Kelvin (e.g., 2500–6500)
+    tapo.set_hue_saturation(120, 100); // Same as set_color()
 }
