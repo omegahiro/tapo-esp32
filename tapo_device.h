@@ -39,45 +39,45 @@ public:
         protocol.handshake(ip_address, username, password);
     }
 
-    void on() {
+    bool on() {
         const String command = "{\"method\":\"set_device_info\",\"params\":{\"device_on\":true}}";
         const String expected = "\"device_on\":true";
-        send_command(command, expected);
+        return send_command(command, expected);
     }
 
-    void off() {
+    bool off() {
         const String command = "{\"method\":\"set_device_info\",\"params\":{\"device_on\":false}}";
         const String expected = "\"device_on\":false";
-        send_command(command, expected);
+        return send_command(command, expected);
     }
 
-    void set_brightness(uint8_t level) {                       // 1-100
+    bool set_brightness(uint8_t level) {                       // 1-100
         String cmd = "{\"method\":\"set_device_info\",\"params\":{" +
                      wrap_param("brightness", String(level), true) + "}}";
         String exp = "\"brightness\":" + String(level);
-        send_command(cmd, exp);
+        return send_command(cmd, exp);
     }
 
-    void set_color(uint16_t hue, uint8_t saturation) {         // hue 0-360, sat 0-100
+    bool set_color(uint16_t hue, uint8_t saturation) {         // hue 0-360, sat 0-100
         String cmd = "{\"method\":\"set_device_info\",\"params\":{" +
                      wrap_param("hue", String(hue), true) + "," +
                      wrap_param("saturation", String(saturation), true) + "," +
                      wrap_param("color_temp", "0", true) + "}}";
         String exp = "\"hue\":" + String(hue);
-        send_command(cmd, exp);
+        return send_command(cmd, exp);
     }
 
-    void set_color_temperature(uint16_t kelvin) {              // e.g. 2500-6500
+    bool set_color_temperature(uint16_t kelvin) {              // e.g. 2500-6500
         String cmd = "{\"method\":\"set_device_info\",\"params\":{" +
                      wrap_param("color_temp", String(kelvin), true) + "," +
                      wrap_param("hue", "0", true) + "," +
                      wrap_param("saturation", "0", true) + "}}";
         String exp = "\"color_temp\":" + String(kelvin);
-        send_command(cmd, exp);
+        return send_command(cmd, exp);
     }
 
-    void set_hue_saturation(uint16_t hue, uint8_t saturation) { // alias
-        set_color(hue, saturation);
+    bool set_hue_saturation(uint16_t hue, uint8_t saturation) { // alias
+        return set_color(hue, saturation);
     }
 };
 
