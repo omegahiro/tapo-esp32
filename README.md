@@ -26,6 +26,16 @@ Control Tapo **P-series smart plugs** and **L-series smart lights** from an ESP3
 
 ## Installation
 
+You can either use this project directly as a sketch, or copy the library files into your own project.
+
+### Option 1: Use as a sketch (Arduino IDE)
+
+1. Download or clone this repository.
+2. Open `tapo-esp32.ino` by double-clicking it (or via Arduino IDE).
+3. Edit Wi-Fi and Tapo credentials, then upload.
+
+### Option 2: Copy files into your project
+
 Copy these files into your project:
 
 - `tapo_device.h`
@@ -34,7 +44,7 @@ Copy these files into your project:
 
 ## Example
 
-- [examples/main.cpp](examples/main.cpp)
+- [tapo-esp32.ino](tapo-esp32.ino)
 
 ## Contributing
 
