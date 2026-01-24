@@ -9,12 +9,11 @@
 #include <mbedtls/sha256.h>
 #include <mbedtls/aes.h>
 
-
 class TapoCipher {
 public:
     TapoCipher(const std::vector<uint8_t>& local_seed,
-        const std::vector<uint8_t>& remote_seed,
-        const std::vector<uint8_t>& auth_hash) {
+               const std::vector<uint8_t>& remote_seed,
+               const std::vector<uint8_t>& auth_hash) {
         std::vector<uint8_t> local_hash = concat(local_seed, remote_seed, auth_hash);
 
         key = key_derive(local_hash);
@@ -34,7 +33,8 @@ public:
 
         std::vector<uint8_t> padded_data = pad(data);
         std::vector<uint8_t> encrypted_data(padded_data.size());
-        mbedtls_aes_crypt_cbc(&aes_ctx, MBEDTLS_AES_ENCRYPT, padded_data.size(), iv_seq_data.data(), padded_data.data(), encrypted_data.data());
+        mbedtls_aes_crypt_cbc(&aes_ctx, MBEDTLS_AES_ENCRYPT, padded_data.size(),
+                              iv_seq_data.data(), padded_data.data(), encrypted_data.data());
         mbedtls_aes_free(&aes_ctx);
 
         std::vector<uint8_t> seq_bytes = to_bytes(seq);
@@ -46,8 +46,15 @@ public:
     }
 
     std::string decrypt(uint32_t seq, const std::vector<uint8_t>& cipher_data) {
-        std::vector<uint8_t> signature(cipher_data.begin(), cipher_data.begin() + 32);
+        if (cipher_data.size() < 32) {
+            return "";
+        }
+
         std::vector<uint8_t> encrypted_data(cipher_data.begin() + 32, cipher_data.end());
+        if (encrypted_data.empty() || (encrypted_data.size() % 16) != 0) {
+            return "";
+        }
+
         std::vector<uint8_t> iv_seq_data = iv_seq(seq);
 
         mbedtls_aes_context aes_ctx;
@@ -55,8 +62,13 @@ public:
         mbedtls_aes_setkey_dec(&aes_ctx, key.data(), key.size() * 8);
 
         std::vector<uint8_t> decrypted_data(encrypted_data.size());
-        mbedtls_aes_crypt_cbc(&aes_ctx, MBEDTLS_AES_DECRYPT, encrypted_data.size(), iv_seq_data.data(), encrypted_data.data(), decrypted_data.data());
+        int rc = mbedtls_aes_crypt_cbc(&aes_ctx, MBEDTLS_AES_DECRYPT, encrypted_data.size(),
+                                       iv_seq_data.data(), encrypted_data.data(), decrypted_data.data());
         mbedtls_aes_free(&aes_ctx);
+
+        if (rc != 0) {
+            return "";
+        }
 
         return unpad(decrypted_data);
     }
@@ -87,7 +99,9 @@ public:
         return combined;
     }
 
-    static std::vector<uint8_t> concat(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b, const std::vector<uint8_t>& c) {
+    static std::vector<uint8_t> concat(const std::vector<uint8_t>& a,
+                                       const std::vector<uint8_t>& b,
+                                       const std::vector<uint8_t>& c) {
         std::vector<uint8_t> combined(a);
         combined.insert(combined.end(), b.begin(), b.end());
         combined.insert(combined.end(), c.begin(), c.end());
@@ -110,7 +124,10 @@ private:
         std::vector<uint8_t> input = concat({ 'i', 'v' }, local_hash);
         auto hash = sha256(input);
         std::vector<uint8_t> iv(hash.begin(), hash.begin() + 12);
-        uint32_t seq = (hash[28] << 24) | (hash[29] << 16) | (hash[30] << 8) | hash[31];
+        uint32_t seq = (static_cast<uint32_t>(hash[28]) << 24) |
+                       (static_cast<uint32_t>(hash[29]) << 16) |
+                       (static_cast<uint32_t>(hash[30]) << 8)  |
+                       (static_cast<uint32_t>(hash[31]));
         return { iv, seq };
     }
 
@@ -122,8 +139,7 @@ private:
 
     std::vector<uint8_t> iv_seq(uint32_t seq) {
         std::vector<uint8_t> seq_bytes = to_bytes(seq);
-        std::vector<uint8_t> iv_seq_combined = concat(iv, seq_bytes);
-        return iv_seq_combined;
+        return concat(iv, seq_bytes);
     }
 
     std::vector<uint8_t> pad(const std::string& data) {
@@ -134,15 +150,24 @@ private:
     }
 
     std::string unpad(const std::vector<uint8_t>& data) {
+        if (data.empty()) return "";
+
         uint8_t padding_len = data.back();
+        if (padding_len == 0 || padding_len > 16) return "";
+        if (padding_len > data.size()) return "";
+
+        for (size_t i = data.size() - padding_len; i < data.size(); i++) {
+            if (data[i] != padding_len) return "";
+        }
+
         return std::string(data.begin(), data.end() - padding_len);
     }
 
     std::vector<uint8_t> to_bytes(uint32_t value) {
         return { static_cast<uint8_t>(value >> 24),
-                static_cast<uint8_t>(value >> 16),
-                static_cast<uint8_t>(value >> 8),
-                static_cast<uint8_t>(value) };
+                 static_cast<uint8_t>(value >> 16),
+                 static_cast<uint8_t>(value >> 8),
+                 static_cast<uint8_t>(value) };
     }
 };
 

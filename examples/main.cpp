@@ -17,8 +17,11 @@ void setup() {
     }
 
     // Initialize Tapo device
-    tapo.begin("device-ip-address", "tapo-username", "tapo-password");
     // Example: tapo.begin("192.168.1.100", "abc@example.com", "abc123");
+    while (!tapo.begin("device-ip-address", "tapo-username", "tapo-password")) {
+        Serial.println("Tapo init failed. Retrying in 2s...");
+        delay(2000);
+    }
 }
 
 void loop() {

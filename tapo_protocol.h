@@ -12,11 +12,18 @@
 
 class TapoProtocol {
 public:
-    void handshake(const String& ip_address, const String& username, const String& password) {        
-        this->url = "http://" + ip_address + "/app";
+    bool handshake(const String& ip_address, const String& username, const String& password) {
+        this->ip_address = ip_address;
+        this->base_url = "http://" + ip_address;
+        this->url = base_url + "/app";
         this->username = username;
         this->password = password;
-        
+
+        if (cipher) {
+            delete cipher;
+            cipher = nullptr;
+        }
+
         std::vector<uint8_t> username_hash = TapoCipher::sha1(to_bytes(username));
         std::vector<uint8_t> password_hash = TapoCipher::sha1(to_bytes(password));
         std::vector<uint8_t> auth_hash = TapoCipher::sha256(TapoCipher::concat(username_hash, password_hash));
@@ -25,18 +32,30 @@ public:
         TAPO_PROTOCOL_DEBUG("Local seed: " + String(TapoCipher::to_hex_string(local_seed).c_str()));
 
         std::vector<uint8_t> remote_seed = handshake1(local_seed, auth_hash);
+        if (remote_seed.empty()) {
+            Serial.println("TAPO_PROTOCOL: handshake1 failed");
+            return false;
+        }
         TAPO_PROTOCOL_DEBUG("Remote seed: " + String(TapoCipher::to_hex_string(remote_seed).c_str()));
-        handshake2(local_seed, remote_seed, auth_hash);
+
+        if (!handshake2(local_seed, remote_seed, auth_hash)) {
+            Serial.println("TAPO_PROTOCOL: handshake2 failed");
+            return false;
+        }
 
         cipher = new TapoCipher(local_seed, remote_seed, auth_hash);
+        return true;
     }
-    
+
     void rehandshake() {
-        delete cipher;
+        if (cipher) {
+            delete cipher;
+            cipher = nullptr;
+        }
         cookie = "";
-        handshake(url, username, password);
+        (void)handshake(ip_address, username, password);
     }
-    
+
     String send_message(const String& message) {
         if (!cipher) {
             Serial.println("TAPO_PROTOCOL: Cipher is not initialized");
@@ -44,22 +63,40 @@ public:
         }
 
         TAPO_PROTOCOL_DEBUG("Sending message: " + message);
-        auto encrypte_message_and_seq = cipher->encrypt(std::string(message.c_str()));
-        auto& encrypte_message = encrypte_message_and_seq.first;
-        auto& seq = encrypte_message_and_seq.second;
-        
+        auto encrypted_message_and_seq = cipher->encrypt(std::string(message.c_str()));
+        auto& encrypted_message = encrypted_message_and_seq.first;
+        auto& seq = encrypted_message_and_seq.second;
+
         std::vector<uint8_t> response;
-        post("/request?seq=" + String(seq), encrypte_message, [&response](HTTPClient& http) {
-            response.resize(http.getSize());
+        int response_code = post("/request?seq=" + String(seq), encrypted_message, [&response](HTTPClient& http) {
+            // http.getSize() may be -1 (unknown). Avoid resize(huge) or empty reads.
+            int size = http.getSize();
+            if (size <= 0) {
+                String body = http.getString();
+                response.assign(body.begin(), body.end());
+                return;
+            }
+            response.resize(static_cast<size_t>(size));
             http.getStream().readBytes(reinterpret_cast<char*>(response.data()), response.size());
         });
 
-        String decrypted_response = String(cipher->decrypt(seq, response).c_str());
+        if (response_code != 200 || response.empty()) {
+            // Fail safely: no abort(), just return "" so upper layer can retry/rehandshake.
+            Serial.println("TAPO_PROTOCOL: request failed, code=" + String(response_code));
+            return "";
+        }
+
+        std::string decrypted = cipher->decrypt(seq, response);
+        if (decrypted.empty()) {
+            Serial.println("TAPO_PROTOCOL: decrypt failed");
+            return "";
+        }
+
+        String decrypted_response = String(decrypted.c_str());
         TAPO_PROTOCOL_DEBUG("Response: " + decrypted_response);
-        
         return decrypted_response;
     }
-    
+
     static std::vector<uint8_t> to_bytes(const String& value) {
         return std::vector<uint8_t>(value.begin(), value.end());
     }
@@ -71,28 +108,37 @@ public:
     static std::vector<uint8_t> random_bytes(size_t size) {
         std::vector<uint8_t> data(size);
         std::generate(data.begin(), data.end(), [&]() { return random(256); });
-
         return data;
     }
-    
-    ~TapoProtocol() {
-        delete cipher;
-    }
 
+    ~TapoProtocol() {
+        if (cipher) {
+            delete cipher;
+            cipher = nullptr;
+        }
+    }
 
 private:
     TapoCipher* cipher = nullptr;
     String cookie;
+
+    String ip_address;
+    String base_url;
     String url;
+
     String username;
     String password;
 
-    int post(const String& endpoint, const std::vector<uint8_t>& payload, std::function<void(HTTPClient&)> response_handler, bool collect_headers = false) {
+    int post(const String& endpoint,
+             const std::vector<uint8_t>& payload,
+             std::function<void(HTTPClient&)> response_handler,
+             bool collect_headers = false) {
+
         if (WiFi.status() != WL_CONNECTED) {
             Serial.println("TAPO_PROTOCOL: Please connect to WiFi first");
             return -1;
         }
-        
+
         HTTPClient http;
         http.begin(url + endpoint);
 
@@ -106,17 +152,27 @@ private:
             http.addHeader("Cookie", "TP_SESSIONID=" + cookie);
         }
 
+        // Prevent long blocking on network issues.
+        http.setTimeout(5000);
+
         int response_code = http.POST(to_string(payload));
         if (response_code != 200) {
             http.end();
             return response_code;
         }
-        
+
         if (collect_headers) {
+            // Cookie may be missing depending on response; parse defensively.
             String cookie_str = http.header("Set-Cookie");
-            int start = cookie_str.indexOf("TP_SESSIONID=") + 13;
-            int end = cookie_str.indexOf(";", start);
-            cookie = cookie_str.substring(start, end);
+            int start = cookie_str.indexOf("TP_SESSIONID=");
+            if (start >= 0) {
+                start += 13;
+                int end = cookie_str.indexOf(";", start);
+                if (end > start) cookie = cookie_str.substring(start, end);
+                else cookie = "";
+            } else {
+                cookie = "";
+            }
         }
 
         response_handler(http);
@@ -125,11 +181,23 @@ private:
         return response_code;
     }
 
-    std::vector<uint8_t> handshake1(const std::vector<uint8_t>& local_seed, const std::vector<uint8_t>& auth_hash) {
+    std::vector<uint8_t> handshake1(const std::vector<uint8_t>& local_seed,
+                                    const std::vector<uint8_t>& auth_hash) {
         String response_str;
-        post("/handshake1", local_seed, [&response_str](HTTPClient& http) {
+        int response_code = post("/handshake1", local_seed, [&response_str](HTTPClient& http) {
             response_str = http.getString();
         }, true);
+
+        if (response_code != 200) {
+            Serial.println("TAPO_PROTOCOL: Handshake1 failed, code=" + String(response_code));
+            return {};
+        }
+
+        // Must be >= 16(remote seed) + 32(hash) bytes to avoid out-of-range access.
+        if (response_str.length() < 48) {
+            Serial.println("TAPO_PROTOCOL: Handshake1 response too short: " + String(response_str.length()));
+            return {};
+        }
 
         std::vector<uint8_t> remote_seed(response_str.begin(), response_str.begin() + 16);
         std::vector<uint8_t> server_hash(response_str.begin() + 16, response_str.end());
@@ -143,16 +211,20 @@ private:
         return remote_seed;
     }
 
-    void handshake2(const std::vector<uint8_t>& local_seed, const std::vector<uint8_t>& remote_seed, const std::vector<uint8_t>& auth_hash) {
+    bool handshake2(const std::vector<uint8_t>& local_seed,
+                    const std::vector<uint8_t>& remote_seed,
+                    const std::vector<uint8_t>& auth_hash) {
         std::vector<uint8_t> payload = TapoCipher::sha256(TapoCipher::concat(remote_seed, local_seed, auth_hash));
         String response_str;
         int response_code = post("/handshake2", payload, [&response_str](HTTPClient& http) {
             response_str = http.getString();
         });
+
         if (response_code != 200) {
             Serial.println("TAPO_PROTOCOL: Handshake2 failed with response code " + String(response_code));
-            return;
+            return false;
         }
         TAPO_PROTOCOL_DEBUG("Handshake2 successful");
+        return true;
     }
 };
