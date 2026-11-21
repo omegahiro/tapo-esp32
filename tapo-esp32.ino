@@ -25,6 +25,13 @@ void setup() {
 }
 
 void loop() {
+    // === Check device (Plugs & Lights) is ON or OFF ===
+    if (tapo.state()) {
+        Serial.println("Device is ON");
+    } else {
+        Serial.println("Device is OFF");
+    }
+
     // === Common controls (Plugs & Lights) ===
     tapo.off(); // Turn the device OFF
     delay(3000);
